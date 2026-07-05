@@ -35,14 +35,15 @@ window.Paisa = window.Paisa || {};
   P.gist = {
     hasCreds() { return !!token() && !!gistId(); },
 
-    // Create a fresh secret gist seeded with an empty encrypted payload. Returns id.
+    // Create a fresh secret gist. GitHub rejects blank file content (422), so seed
+    // with a placeholder; the app overwrites it with the encrypted envelope on first save.
     async create(initialContent) {
       const res = await ghFetch('/gists', {
         method: 'POST',
         body: JSON.stringify({
           description: 'Paisa finance data (encrypted). Do not edit manually.',
           public: false,
-          files: { [FILENAME]: { content: initialContent || '' } }
+          files: { [FILENAME]: { content: initialContent || '{}' } }
         })
       });
       const json = await res.json();

@@ -70,8 +70,11 @@ window.Paisa = window.Paisa || {};
       if (!raw) return null;
       try {
         const env = JSON.parse(raw);
-        if (env && typeof env === 'object' && env.data) return env;
-      } catch (e) { /* legacy: raw was bare ciphertext */ }
+        if (env && typeof env === 'object') {
+          // Real envelope has .data; the seed placeholder ('{}') does not = empty.
+          return env.data ? env : null;
+        }
+      } catch (e) { /* legacy: raw was bare ciphertext, not JSON */ }
       return { salt: null, data: raw };
     },
 

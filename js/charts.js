@@ -5,8 +5,8 @@ window.Paisa = window.Paisa || {};
   'use strict';
   const charts = {}; // keep instances to destroy on re-render
 
-  const PALETTE = ['#16a34a', '#2563eb', '#f59e0b', '#dc2626', '#7c3aed', '#0891b2',
-    '#db2777', '#65a30d', '#ea580c', '#0d9488', '#4f46e5', '#b45309'];
+  const PALETTE = ['#1e2a52', '#a63a2b', '#1f6e4e', '#7a4a00', '#3a5a8a', '#8a6d3b',
+    '#6b4a7a', '#4a7a6b', '#a5744a', '#5a6a4a', '#7a3a5a', '#3a6a7a'];
 
   function themeColors() {
     const cs = getComputedStyle(document.documentElement);
@@ -98,8 +98,8 @@ window.Paisa = window.Paisa || {};
         data: {
           labels: keys.map((k) => periodLabel(k, gran)),
           datasets: [
-            { label: 'Income', data: keys.map((k) => inc[k] || 0), backgroundColor: '#16a34a', borderRadius: 4 },
-            { label: 'Expense', data: keys.map((k) => exp[k] || 0), backgroundColor: '#dc2626', borderRadius: 4 }
+            { label: 'Income', data: keys.map((k) => inc[k] || 0), backgroundColor: '#1f6e4e', borderRadius: 2 },
+            { label: 'Expense', data: keys.map((k) => exp[k] || 0), backgroundColor: '#a63a2b', borderRadius: 2 }
           ]
         },
         options: {
@@ -138,7 +138,7 @@ window.Paisa = window.Paisa || {};
           labels: points.map((p) => P.fmt.date(p.x)),
           datasets: [{
             label: 'Net worth', data: points.map((p) => p.y),
-            borderColor: '#16a34a', backgroundColor: 'rgba(22,163,74,.12)',
+            borderColor: '#1e2a52', backgroundColor: 'rgba(30,42,82,.10)',
             fill: true, tension: .25, pointRadius: 0, borderWidth: 2
           }]
         },

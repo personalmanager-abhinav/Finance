@@ -1,6 +1,6 @@
 /* Paisa service worker — offline app-shell caching.
    Bump CACHE_VERSION whenever any cached asset changes to force update. */
-const CACHE_VERSION = 'paisa-v1';
+const CACHE_VERSION = 'paisa-v3';
 const APP_SHELL = [
   './',
   './index.html',
@@ -52,7 +52,8 @@ self.addEventListener('fetch', (event) => {
       return fetch(event.request)
         .then((resp) => {
           // Only cache same-origin or known CDN GETs that succeed.
-          if (resp && resp.status === 200 && (url.origin === self.location.origin || url.hostname === 'cdn.jsdelivr.net')) {
+          const cacheableHosts = ['cdn.jsdelivr.net', 'fonts.googleapis.com', 'fonts.gstatic.com'];
+          if (resp && resp.status === 200 && (url.origin === self.location.origin || cacheableHosts.includes(url.hostname))) {
             const copy = resp.clone();
             caches.open(CACHE_VERSION).then((c) => c.put(event.request, copy));
           }

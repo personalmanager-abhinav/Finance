@@ -28,6 +28,7 @@ window.Paisa = window.Paisa || {};
       throw new Error('Access forbidden (403).');
     }
     if (res.status === 404) throw new Error('Gist not found (404). Check the Gist ID and token.');
+    if (res.status === 422) throw new Error('GitHub rejected the request (422). Token likely lacks gist scope, or is fine-grained without gist access. Use a classic token with the gist scope.');
     if (!res.ok) throw new Error('GitHub error ' + res.status + ': ' + res.statusText);
     return res;
   }

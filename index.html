@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en-IN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#16a34a" />
+  <title>Paisa</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icons/favicon-32.png" sizes="32x32" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Paisa" />
+  <meta name="mobile-web-app-capable" content="yes" />
+
+  <link rel="stylesheet" href="css/styles.css" />
+  <!-- Chart.js (charts). Cached by service worker after first load. -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+</head>
+<body>
+
+<!-- ============ LOCK / PIN SCREEN ============ -->
+<section id="screen-lock" class="screen center-screen">
+  <div class="lock-card">
+    <div class="brand"><span class="brand-mark">₹</span><span class="brand-name">Paisa</span></div>
+    <p id="lock-subtitle" class="muted">Enter your PIN</p>
+    <div class="pin-dots" id="pin-dots"></div>
+    <div id="lock-error" class="error-text" hidden></div>
+    <div class="keypad" id="keypad"></div>
+    <button id="lock-reset" class="link-btn" type="button">Reset app / forgot PIN</button>
+  </div>
+</section>
+
+<!-- ============ FIRST-RUN SETUP ============ -->
+<section id="screen-setup" class="screen" hidden>
+  <div class="setup-wrap">
+    <div class="brand center"><span class="brand-mark">₹</span><span class="brand-name">Paisa</span></div>
+    <p class="muted center">First-time setup. Your data lives in your own secret GitHub Gist, encrypted on this device.</p>
+
+    <div class="card">
+      <h3>1. GitHub token</h3>
+      <p class="hint">Create a token with <b>gist</b> scope at
+        <a href="https://github.com/settings/tokens/new?scopes=gist&description=Paisa" target="_blank" rel="noopener">github.com/settings/tokens</a>.
+        Paste it below. It is stored only on this device.</p>
+      <input id="setup-token" type="password" placeholder="ghp_..." autocomplete="off" />
+    </div>
+
+    <div class="card">
+      <h3>2. Gist</h3>
+      <p class="hint">Use an existing Gist ID, or create a fresh secret Gist.</p>
+      <input id="setup-gistid" type="text" placeholder="Existing Gist ID (optional)" autocomplete="off" />
+      <button id="setup-creategist" class="btn ghost" type="button">Create new secret Gist</button>
+      <div id="setup-gist-status" class="hint"></div>
+    </div>
+
+    <div class="card">
+      <h3>3. Set a PIN</h3>
+      <p class="hint">Your PIN unlocks the app and derives the encryption key. There is no recovery — if you forget it, data cannot be decrypted.</p>
+      <input id="setup-pin" type="password" inputmode="numeric" pattern="[0-9]*" placeholder="PIN (4–8 digits)" autocomplete="off" />
+      <input id="setup-pin2" type="password" inputmode="numeric" pattern="[0-9]*" placeholder="Confirm PIN" autocomplete="off" />
+    </div>
+
+    <div id="setup-error" class="error-text" hidden></div>
+    <button id="setup-finish" class="btn primary block" type="button">Finish setup</button>
+  </div>
+</section>
+
+<!-- ============ MAIN APP ============ -->
+<div id="app" hidden>
+  <header class="topbar">
+    <div class="brand small"><span class="brand-mark">₹</span><span class="brand-name">Paisa</span></div>
+    <div class="topbar-actions">
+      <button id="btn-sync" class="icon-btn" title="Sync to Gist" type="button">⟳</button>
+      <button id="btn-theme" class="icon-btn" title="Toggle theme" type="button">◐</button>
+      <button id="btn-lock" class="icon-btn" title="Lock" type="button">🔒</button>
+    </div>
+  </header>
+
+  <div id="sync-banner" class="sync-banner" hidden></div>
+
+  <main>
+    <!-- DASHBOARD -->
+    <section id="view-dashboard" class="view">
+      <div class="networth-card">
+        <div class="nw-label">Net worth</div>
+        <div class="nw-value" id="nw-value">₹0</div>
+        <div class="nw-sub" id="nw-sub"></div>
+      </div>
+
+      <div id="cc-alerts"></div>
+
+      <h3 class="section-title">Accounts</h3>
+      <div id="account-cards" class="account-cards"></div>
+      <button id="btn-add-account" class="btn ghost block" type="button">+ Add account</button>
+
+      <div class="chart-block">
+        <div class="chart-head">
+          <h3 class="section-title">Spending by category</h3>
+          <select id="pie-range" class="mini-select">
+            <option value="month">This month</option>
+            <option value="year">This year</option>
+            <option value="all">All time</option>
+          </select>
+        </div>
+        <canvas id="chart-category"></canvas>
+      </div>
+
+      <div class="chart-block">
+        <div class="chart-head">
+          <h3 class="section-title">Income vs expense</h3>
+          <select id="bar-granularity" class="mini-select">
+            <option value="day">Daily</option>
+            <option value="week">Weekly</option>
+            <option value="month" selected>Monthly</option>
+            <option value="year">Yearly</option>
+          </select>
+        </div>
+        <canvas id="chart-trend"></canvas>
+      </div>
+
+      <div class="chart-block">
+        <h3 class="section-title">Net worth over time</h3>
+        <canvas id="chart-networth"></canvas>
+      </div>
+
+      <div class="chart-block">
+        <h3 class="section-title">Breakdown by account &amp; category</h3>
+        <div id="breakdown-table"></div>
+      </div>
+    </section>
+
+    <!-- TRANSACTIONS -->
+    <section id="view-transactions" class="view" hidden>
+      <div class="filters">
+        <input id="f-search" type="search" placeholder="Search category / note..." />
+        <div class="filter-row">
+          <select id="f-account" class="mini-select"><option value="">All accounts</option></select>
+          <select id="f-category" class="mini-select"><option value="">All categories</option></select>
+        </div>
+        <div class="filter-row">
+          <input id="f-from" type="date" title="From date" />
+          <input id="f-to" type="date" title="To date" />
+        </div>
+        <div class="filter-row">
+          <input id="f-min" type="number" placeholder="Min ₹" />
+          <input id="f-max" type="number" placeholder="Max ₹" />
+          <button id="f-clear" class="btn ghost" type="button">Clear</button>
+        </div>
+      </div>
+      <div id="txn-summary" class="txn-summary"></div>
+      <div id="txn-list" class="txn-list"></div>
+    </section>
+
+    <!-- ACCOUNTS / MANAGE -->
+    <section id="view-manage" class="view" hidden>
+      <h3 class="section-title">Accounts</h3>
+      <div id="manage-accounts"></div>
+      <button id="btn-add-account2" class="btn ghost block" type="button">+ Add account</button>
+
+      <h3 class="section-title">Credit card dues</h3>
+      <div id="manage-cc"></div>
+
+      <h3 class="section-title">Categories</h3>
+      <div id="manage-categories"></div>
+      <div class="inline-add">
+        <input id="new-category" type="text" placeholder="New category name" />
+        <select id="new-category-type" class="mini-select">
+          <option value="expense">Expense</option>
+          <option value="income">Income</option>
+        </select>
+        <button id="btn-add-category" class="btn ghost" type="button">Add</button>
+      </div>
+
+      <h3 class="section-title">Recurring</h3>
+      <div id="manage-recurring"></div>
+
+      <h3 class="section-title">Data</h3>
+      <div class="data-actions">
+        <button id="btn-export-json" class="btn ghost" type="button">Export JSON</button>
+        <button id="btn-export-csv" class="btn ghost" type="button">Export CSV</button>
+        <button id="btn-open-settings" class="btn ghost" type="button">Settings</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- BOTTOM NAV -->
+  <nav class="bottom-nav">
+    <button class="nav-btn active" data-view="dashboard" type="button"><span>◎</span>Home</button>
+    <button class="nav-btn" data-view="transactions" type="button"><span>≣</span>Txns</button>
+    <button id="fab-add" class="fab" type="button" aria-label="Add transaction">+</button>
+    <button class="nav-btn" data-view="manage" type="button"><span>⚙</span>Manage</button>
+    <button class="nav-btn" id="nav-lock" type="button"><span>🔒</span>Lock</button>
+  </nav>
+</div>
+
+<!-- ============ MODALS ============ -->
+<div id="modal-root" class="modal-root" hidden>
+  <div class="modal-backdrop" data-close></div>
+  <div class="modal" role="dialog" aria-modal="true">
+    <div class="modal-head">
+      <h3 id="modal-title">Title</h3>
+      <button class="icon-btn" data-close type="button">✕</button>
+    </div>
+    <div id="modal-body" class="modal-body"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<!-- App scripts (order matters; each attaches to window.Paisa) -->
+<script src="js/format.js"></script>
+<script src="js/crypto.js"></script>
+<script src="js/gist.js"></script>
+<script src="js/store.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

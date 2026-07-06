@@ -1,6 +1,6 @@
 /* Paisa service worker — offline app-shell caching.
    Bump CACHE_VERSION whenever any cached asset changes to force update. */
-const CACHE_VERSION = 'paisa-v12';
+const CACHE_VERSION = 'paisa-v18';
 const APP_SHELL = [
   './',
   './index.html',

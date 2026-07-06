@@ -8,8 +8,10 @@
 
   <!-- PWA -->
   <link rel="manifest" href="manifest.json" />
-  <link rel="icon" href="icons/favicon-32.png" sizes="32x32" />
-  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=17" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png?v=17" />
+  <link rel="shortcut icon" href="icons/favicon-32.png?v=17" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=17" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Paisa" />
@@ -27,7 +29,7 @@
 <!-- ============ LOCK / PIN SCREEN ============ -->
 <section id="screen-lock" class="screen center-screen">
   <div class="lock-card">
-    <div class="brand"><span class="brand-mark">₹</span><span class="brand-name">Paisa</span></div>
+    <div class="brand"><img class="brand-logo" src="icons/icon-192.png" alt="" /><span class="brand-name">Paisa</span></div>
     <p id="lock-subtitle" class="muted">Enter your PIN</p>
     <div class="pin-dots" id="pin-dots"></div>
     <div id="lock-error" class="error-text" hidden></div>
@@ -39,7 +41,7 @@
 <!-- ============ FIRST-RUN SETUP ============ -->
 <section id="screen-setup" class="screen" hidden>
   <div class="setup-wrap">
-    <div class="brand center"><span class="brand-mark">₹</span><span class="brand-name">Paisa</span></div>
+    <div class="brand center"><img class="brand-logo" src="icons/icon-192.png" alt="" /><span class="brand-name">Paisa</span></div>
     <p class="muted center">First-time setup. Your data lives in your own secret GitHub Gist, encrypted on this device.</p>
 
     <div class="card">
@@ -73,7 +75,7 @@
 <!-- ============ MAIN APP ============ -->
 <div id="app" hidden>
   <header class="topbar">
-    <div class="brand small"><span class="brand-mark">₹</span><span class="brand-name">Paisa</span></div>
+    <div class="brand small"><img class="brand-logo" src="icons/icon-192.png" alt="" /><span class="brand-name">Paisa</span></div>
     <div class="topbar-actions">
       <button id="btn-sync" class="icon-btn" title="Sync to Gist" type="button" aria-label="Sync">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-9 9c-2.5 0-4.8-1-6.4-2.7M3 12a9 9 0 0 1 9-9c2.5 0 4.8 1 6.4 2.7"/><path d="M21 4v4h-4M3 20v-4h4"/></svg>

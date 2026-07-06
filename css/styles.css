@@ -59,17 +59,18 @@ b, strong { font-weight: 600; }
   font-variant-numeric: tabular-nums;
 }
 
-/* ===== Brand (leafy-green rupee mark) ===== */
-.brand { display: inline-flex; align-items: center; gap: 9px; font-weight: 600; }
-.brand-mark {
-  display: inline-grid; place-items: center;
-  width: 30px; height: 30px; border-radius: 9px;
-  background: var(--green); color: #fff; font-size: 17px; font-weight: 600;
-}
-.brand-name { font-size: 19px; letter-spacing: -.4px; }
-.brand.small .brand-mark { width: 26px; height: 26px; font-size: 15px; border-radius: 8px; }
-.brand.small .brand-name { font-size: 17px; }
-.brand.center { justify-content: center; margin: 26px 0 6px; }
+/* ===== Brand ===== */
+.brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; }
+.brand-logo { width: 40px; height: 40px; border-radius: 11px; display: block; }
+.brand-name { font-size: 20px; letter-spacing: -.5px; font-weight: 600; }
+/* Topbar */
+.brand.small .brand-logo { width: 30px; height: 30px; border-radius: 8px; }
+.brand.small .brand-name { font-size: 19px; }
+.brand.center { flex-direction: column; gap: 12px; justify-content: center; margin: 26px 0 6px; }
+.brand.center .brand-logo { width: 56px; height: 56px; border-radius: 15px; }
+.brand.center .brand-name { font-size: 24px; }
+.lock-card .brand { flex-direction: column; gap: 12px; justify-content: center; margin-bottom: 10px; }
+.lock-card .brand .brand-logo { width: 52px; height: 52px; border-radius: 14px; }
 
 /* ===== Buttons ===== */
 .btn {

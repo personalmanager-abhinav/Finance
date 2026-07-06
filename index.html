@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#f7f6f2" />
+  <meta name="theme-color" content="#ffffff" />
   <title>Paisa</title>
 
   <!-- PWA -->
@@ -100,6 +100,10 @@
 
       <div id="cc-alerts"></div>
 
+      <div id="template-row" class="tpl-row"></div>
+
+      <div id="goals-block"></div>
+
       <h3 class="section-title">Accounts</h3>
       <div id="account-cards" class="account-cards"></div>
       <button id="btn-add-account" class="btn ghost block" type="button">+ Add account</button>
@@ -164,6 +168,42 @@
       <div id="txn-list" class="txn-list"></div>
     </section>
 
+    <!-- INSIGHTS -->
+    <section id="view-insights" class="view" hidden>
+      <h3 class="section-title">This month</h3>
+      <div id="ins-kpis" class="kpi-grid"></div>
+
+      <h3 class="section-title">Insights</h3>
+      <div id="ins-notes" class="insight-list"></div>
+
+      <div class="chart-block">
+        <h3 class="section-title">Spending heatmap · last 26 weeks</h3>
+        <div id="ins-heatmap"></div>
+      </div>
+
+      <div class="chart-block">
+        <div class="chart-head">
+          <h3 class="section-title">Top payees</h3>
+          <select id="payee-range" class="mini-select">
+            <option value="all">All time</option>
+            <option value="year">This year</option>
+            <option value="month">This month</option>
+          </select>
+        </div>
+        <div id="ins-payees"></div>
+      </div>
+
+      <div class="chart-block">
+        <h3 class="section-title">Money flow</h3>
+        <div id="ins-sankey"></div>
+      </div>
+
+      <div class="chart-block">
+        <h3 class="section-title">Month over month</h3>
+        <div id="ins-mom"></div>
+      </div>
+    </section>
+
     <!-- ACCOUNTS / MANAGE -->
     <section id="view-manage" class="view" hidden>
       <h3 class="section-title">Accounts</h3>
@@ -183,6 +223,14 @@
         </select>
         <button id="btn-add-category" class="btn ghost" type="button">Add</button>
       </div>
+
+      <h3 class="section-title">Savings goals</h3>
+      <div id="manage-goals"></div>
+      <button id="btn-add-goal" class="btn ghost block" type="button">+ Add goal</button>
+
+      <h3 class="section-title">Quick-add templates</h3>
+      <div id="manage-templates"></div>
+      <button id="btn-add-template" class="btn ghost block" type="button">+ Add template</button>
 
       <h3 class="section-title">Recurring</h3>
       <div id="manage-recurring"></div>
@@ -204,10 +252,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h13M4 12h16M4 17h10"/></svg>Txns</button>
     <button id="fab-add" class="fab" type="button" aria-label="Add transaction">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+    <button class="nav-btn" data-view="insights" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5"/><path d="M4 15l4-4 4 3 6-7"/></svg>Insights</button>
     <button class="nav-btn" data-view="manage" type="button">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 0 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H1a2 2 0 0 1 0-4h.1A1.6 1.6 0 0 0 2.6 7a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H7a1.6 1.6 0 0 0 1-1.5V1a2 2 0 0 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V7a1.6 1.6 0 0 0 1.5 1H23a2 2 0 0 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>Manage</button>
-    <button class="nav-btn" id="nav-lock" type="button">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>Lock</button>
   </nav>
 </div>
 
@@ -231,6 +279,7 @@
 <script src="js/gist.js"></script>
 <script src="js/store.js"></script>
 <script src="js/charts.js"></script>
+<script src="js/insights.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/app.js"></script>
 </body>

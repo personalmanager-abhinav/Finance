@@ -29,7 +29,7 @@ window.Paisa = window.Paisa || {};
   // ---------- navigation ----------
   function show(view) {
     currentView = view;
-    ['dashboard', 'transactions', 'manage'].forEach((v) => {
+    ['dashboard', 'transactions', 'insights', 'manage'].forEach((v) => {
       $('view-' + v).hidden = v !== view;
     });
     document.querySelectorAll('.nav-btn[data-view]').forEach((b) =>
@@ -40,6 +40,7 @@ window.Paisa = window.Paisa || {};
   function refresh() {
     if (currentView === 'dashboard') renderDashboard();
     else if (currentView === 'transactions') renderTransactions();
+    else if (currentView === 'insights') renderInsights();
     else if (currentView === 'manage') renderManage();
   }
 
@@ -68,6 +69,9 @@ window.Paisa = window.Paisa || {};
       ccWrap.appendChild(div);
     });
 
+    renderTemplateRow();
+    renderGoalsBlock();
+
     // account cards
     const wrap = $('account-cards'); wrap.innerHTML = '';
     if (!st.state.accounts.length) {
@@ -91,6 +95,67 @@ window.Paisa = window.Paisa || {};
     P.charts.trend('chart-trend', $('bar-granularity').value);
     P.charts.networth('chart-networth');
     P.charts.breakdown('breakdown-table', $('pie-range').value);
+  }
+
+  // ---------- quick-add templates (dashboard chip row) ----------
+  function renderTemplateRow() {
+    const st = S();
+    const row = $('template-row');
+    const chips = st.state.templates.map((t) =>
+      `<button class="tpl-chip" data-tpl="${t.id}" type="button">${esc(t.label)}
+        <span class="tpl-amt">${P.fmt.money(t.amount)}</span></button>`).join('');
+    row.innerHTML = chips + `<button class="tpl-chip add" id="tpl-add-inline" type="button">+ Template</button>`;
+  }
+
+  // ---------- goals (dashboard block) ----------
+  function goalCardHTML(g) {
+    const pct = g.target > 0 ? Math.min(100, Math.round((g.current / g.target) * 100)) : 0;
+    let meta = `${pct}%`;
+    if (g.deadline) {
+      const months = Math.max(0, (new Date(g.deadline) - new Date(P.fmt.todayISO())) / 2629800000);
+      const remaining = Math.max(0, g.target - g.current);
+      if (remaining > 0 && months > 0) meta += ` · need ${P.fmt.money(remaining / months)}/mo by ${P.fmt.date(g.deadline)}`;
+      else if (remaining > 0) meta += ` · due ${P.fmt.date(g.deadline)}`;
+    }
+    return `<div class="goal" data-goal="${g.id}">
+      <div class="goal-head"><span class="goal-name">${esc(g.name)}</span>
+        <span class="goal-nums">${P.fmt.money(g.current)} / ${P.fmt.money(g.target)}</span></div>
+      <div class="goal-track"><div class="goal-fill" style="width:${pct}%"></div></div>
+      <div class="goal-meta"><span>${meta}</span></div>
+      <div class="goal-actions">
+        <button class="btn ghost" data-goal-add="${g.id}" type="button">+ Contribute</button>
+        <button class="btn ghost" data-goal-edit="${g.id}" type="button">Edit</button>
+      </div></div>`;
+  }
+  function renderGoalsBlock() {
+    const st = S();
+    const el = $('goals-block');
+    if (!st.state.goals.length) { el.innerHTML = ''; return; }
+    el.innerHTML = '<h3 class="section-title">Savings goals</h3>' + st.state.goals.map(goalCardHTML).join('');
+  }
+
+  // ---------- insights view ----------
+  function renderInsights() {
+    const k = P.insights.kpis();
+    const kpi = (label, value, sub, pos) =>
+      `<div class="kpi"><div class="k-label">${label}</div>
+        <div class="k-value${pos ? ' pos' : ''}">${value}</div><div class="k-sub">${sub || ''}</div></div>`;
+    const rate = k.savingsRate == null ? '—' : Math.round(k.savingsRate * 100) + '%';
+    const runway = k.runway == null ? '—' : k.runway.toFixed(1) + ' mo';
+    $('ins-kpis').innerHTML =
+      kpi('Income', P.fmt.money(k.income), k.monthLabel) +
+      kpi('Expense', P.fmt.money(k.expense), k.monthLabel) +
+      kpi('Net', P.fmt.money(k.net), k.net >= 0 ? 'saved' : 'overspent', k.net >= 0) +
+      kpi('Savings rate', rate, 'of income', k.savingsRate != null && k.savingsRate >= 0) +
+      kpi('Runway', runway, 'at recent pace') +
+      kpi('Avg spend', P.fmt.money(k.avgMonthlyExpense), '3-mo/month');
+
+    $('ins-notes').innerHTML = P.insights.notes().map((n) => `<div class="insight-item">${esc(n)}</div>`).join('');
+
+    P.charts.heatmap('ins-heatmap');
+    P.charts.topPayees('ins-payees', $('payee-range').value);
+    P.charts.sankey('ins-sankey');
+    P.charts.momCompare('ins-mom');
   }
 
   // ---------- transactions ----------
@@ -222,11 +287,17 @@ window.Paisa = window.Paisa || {};
     return S().categoriesByType(type)
       .map((c) => `<option value="${esc(c.name)}" ${c.name === selected ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
   }
+  // Distinct past payees for the autocomplete datalist.
+  function payeeDatalist() {
+    const seen = new Set();
+    S().state.transactions.forEach((t) => { if (t.payee) seen.add(t.payee); });
+    return Array.from(seen).map((p) => `<option value="${esc(p)}">`).join('');
+  }
 
   function openTxnModal(existing) {
     const st = S();
     if (!st.state.accounts.length) { toast('Add an account first'); openAccountModal(); return; }
-    const t = existing || { type: 'expense', date: P.fmt.todayISO(), amount: '', category: '', accountId: st.state.accounts[0].id, toAccountId: null, note: '' };
+    const t = existing || { type: 'expense', date: P.fmt.todayISO(), amount: '', category: '', accountId: st.state.accounts[0].id, toAccountId: null, payee: '', note: '' };
     const body = `
       <div class="seg type">
         <button data-type="expense" class="${t.type === 'expense' ? 'active' : ''}">Expense</button>
@@ -243,6 +314,9 @@ window.Paisa = window.Paisa || {};
       <select id="m-account">${accountOptions(t.accountId)}</select>
       <div id="m-to-wrap" hidden><label>To account</label>
         <select id="m-toaccount">${accountOptions(t.toAccountId)}</select></div>
+      <div id="m-payee-wrap"><label>Payee (optional)</label>
+        <input id="m-payee" type="text" list="payee-list" placeholder="e.g. Blinkit, Zomato" value="${esc(t.payee || '')}" />
+        <datalist id="payee-list">${payeeDatalist()}</datalist></div>
       <label>Note (optional)</label>
       <input id="m-note" type="text" placeholder="e.g. Jio recharge" value="${esc(t.note || '')}" />
       <label style="display:flex;align-items:center;gap:8px;margin-top:12px">
@@ -261,6 +335,7 @@ window.Paisa = window.Paisa || {};
         const isTransfer = type === 'transfer';
         $('m-cat-wrap').hidden = isTransfer;
         $('m-to-wrap').hidden = !isTransfer;
+        $('m-payee-wrap').hidden = isTransfer;
         $('m-acc-label').textContent = isTransfer ? 'From account' : 'Account';
         if (!isTransfer) $('m-category').innerHTML = categoryOptions(type === 'income' ? 'income' : 'expense', t.category);
       };
@@ -276,6 +351,7 @@ window.Paisa = window.Paisa || {};
           type, amount, date: $('m-date').value || P.fmt.todayISO(),
           category: type === 'transfer' ? 'Transfer' : $('m-category').value,
           accountId, toAccountId: type === 'transfer' ? $('m-toaccount').value : null,
+          payee: type === 'transfer' ? '' : $('m-payee').value.trim(),
           note: $('m-note').value.trim()
         };
         if (type === 'transfer' && data.accountId === data.toAccountId) { toast('Pick two different accounts'); return; }

@@ -37,6 +37,8 @@ window.Paisa = window.Paisa || {};
       transactions: [],
       categories: DEFAULT_CATEGORIES.map((c) => ({ id: P.uid(), ...c })),
       recurring: [],
+      goals: [],
+      templates: [],
       meta: { createdAt: new Date().toISOString() }
     };
   }
@@ -57,7 +59,7 @@ window.Paisa = window.Paisa || {};
       if (!obj || typeof obj !== 'object') { this.state = emptyState(); return; }
       this.state = Object.assign(emptyState(), obj);
       // guard arrays
-      ['accounts', 'transactions', 'categories', 'recurring'].forEach((k) => {
+      ['accounts', 'transactions', 'categories', 'recurring', 'goals', 'templates'].forEach((k) => {
         if (!Array.isArray(this.state[k])) this.state[k] = [];
       });
       if (!this.state.categories.length) this.state.categories = emptyState().categories;
@@ -165,6 +167,7 @@ window.Paisa = window.Paisa || {};
         category: t.category || (t.type === 'transfer' ? 'Transfer' : ''),
         accountId: t.accountId,
         toAccountId: t.type === 'transfer' ? t.toAccountId : null,
+        payee: (t.payee || '').trim(),
         note: t.note || '',
         recurringId: t.recurringId || null
       };
@@ -280,6 +283,91 @@ window.Paisa = window.Paisa || {};
       if (d < today) d = new Date(y, m + 1, acc.dueDay);
       const off = d.getTimezoneOffset();
       return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
+    },
+
+    // ---- goals ----
+    addGoal(g) {
+      const goal = {
+        id: P.uid(), name: (g.name || '').trim() || 'Goal',
+        target: Math.abs(Number(g.target)) || 0,
+        current: Math.abs(Number(g.current)) || 0,
+        deadline: g.deadline || null,
+        createdAt: P.fmt.todayISO()
+      };
+      this.state.goals.push(goal); this.touch(); return goal;
+    },
+    updateGoal(id, patch) {
+      const g = this.state.goals.find((x) => x.id === id);
+      if (g) { Object.assign(g, patch); this.touch(); }
+    },
+    contributeGoal(id, amount) {
+      const g = this.state.goals.find((x) => x.id === id);
+      if (g) { g.current = Math.max(0, (Number(g.current) || 0) + Number(amount)); this.touch(); }
+    },
+    deleteGoal(id) { this.state.goals = this.state.goals.filter((x) => x.id !== id); this.touch(); },
+
+    // ---- quick-add templates ----
+    addTemplate(t) {
+      const tpl = {
+        id: P.uid(), label: (t.label || '').trim() || 'Quick add',
+        type: t.type || 'expense', amount: Math.abs(Number(t.amount)) || 0,
+        category: t.category || '', accountId: t.accountId || null,
+        toAccountId: t.toAccountId || null, payee: (t.payee || '').trim(), note: t.note || ''
+      };
+      this.state.templates.push(tpl); this.touch(); return tpl;
+    },
+    deleteTemplate(id) { this.state.templates = this.state.templates.filter((x) => x.id !== id); this.touch(); },
+    // Create a transaction from a template, dated today.
+    applyTemplate(id) {
+      const t = this.state.templates.find((x) => x.id === id);
+      if (!t) return null;
+      return this.addTransaction({
+        type: t.type, amount: t.amount, date: P.fmt.todayISO(), category: t.category,
+        accountId: t.accountId, toAccountId: t.toAccountId, payee: t.payee, note: t.note
+      });
+    },
+
+    // ---- period helpers for insights ----
+    // Sum income/expense within [fromISO, toISO] inclusive (transfers excluded).
+    sumIn(fromISO, toISO) {
+      let income = 0, expense = 0;
+      for (const t of this.state.transactions) {
+        if (t.type === 'transfer') continue;
+        if (fromISO && t.date < fromISO) continue;
+        if (toISO && t.date > toISO) continue;
+        if (t.type === 'income') income += t.amount; else expense += t.amount;
+      }
+      return { income, expense, net: income - expense };
+    },
+    monthRange(offset) {
+      // offset 0 = current month, -1 = last month. Returns {from,to,key,label}.
+      const d = new Date(); const y = d.getFullYear(); const m = d.getMonth() + (offset || 0);
+      const start = new Date(y, m, 1); const end = new Date(y, m + 1, 0);
+      const iso = (x) => { const o = x.getTimezoneOffset(); return new Date(x.getTime() - o * 60000).toISOString().slice(0, 10); };
+      return { from: iso(start), to: iso(end), key: iso(start).slice(0, 7),
+        label: start.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) };
+    },
+    // Average monthly expense over the last n full+current months (default 3).
+    monthlyExpenseAvg(n) {
+      n = n || 3; let total = 0, months = 0;
+      for (let i = 0; i < n; i++) {
+        const r = this.monthRange(-i);
+        const s = this.sumIn(r.from, r.to);
+        total += s.expense; months++;
+      }
+      return months ? total / months : 0;
+    },
+    // Savings rate over a period: net / income. Null if no income.
+    savingsRate(fromISO, toISO) {
+      const s = this.sumIn(fromISO, toISO);
+      if (s.income <= 0) return null;
+      return s.net / s.income;
+    },
+    // Runway = liquid assets / average monthly expense (months). Null if no spend.
+    runwayMonths() {
+      const avg = this.monthlyExpenseAvg(3);
+      if (avg <= 0) return null;
+      return this.totalAssets() / avg;
     }
   };
 

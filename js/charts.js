@@ -5,8 +5,8 @@ window.Paisa = window.Paisa || {};
   'use strict';
   const charts = {}; // keep instances to destroy on re-render
 
-  const PALETTE = ['#1e2a52', '#a63a2b', '#1f6e4e', '#7a4a00', '#3a5a8a', '#8a6d3b',
-    '#6b4a7a', '#4a7a6b', '#a5744a', '#5a6a4a', '#7a3a5a', '#3a6a7a'];
+  const PALETTE = ['#2f9e44', '#7cc78c', '#1e6b30', '#57b368', '#0f4d20', '#a3d9ac',
+    '#3f8f52', '#155f28', '#6fbf80', '#245c33', '#8ecf9b', '#12401d'];
 
   function themeColors() {
     const cs = getComputedStyle(document.documentElement);
@@ -98,8 +98,8 @@ window.Paisa = window.Paisa || {};
         data: {
           labels: keys.map((k) => periodLabel(k, gran)),
           datasets: [
-            { label: 'Income', data: keys.map((k) => inc[k] || 0), backgroundColor: '#1f6e4e', borderRadius: 2 },
-            { label: 'Expense', data: keys.map((k) => exp[k] || 0), backgroundColor: '#a63a2b', borderRadius: 2 }
+            { label: 'Income', data: keys.map((k) => inc[k] || 0), backgroundColor: '#2f9e44', borderRadius: 4 },
+            { label: 'Expense', data: keys.map((k) => exp[k] || 0), backgroundColor: '#1e6b30', borderRadius: 4 }
           ]
         },
         options: {
@@ -138,7 +138,7 @@ window.Paisa = window.Paisa || {};
           labels: points.map((p) => P.fmt.date(p.x)),
           datasets: [{
             label: 'Net worth', data: points.map((p) => p.y),
-            borderColor: '#1e2a52', backgroundColor: 'rgba(30,42,82,.10)',
+            borderColor: '#2f9e44', backgroundColor: 'rgba(47,158,68,.12)',
             fill: true, tension: .25, pointRadius: 0, borderWidth: 2
           }]
         },
@@ -179,6 +179,162 @@ window.Paisa = window.Paisa || {};
       });
       html += '</tbody></table>';
       el.innerHTML = html;
+    },
+
+    // ----- Spending heatmap: last 26 weeks, GitHub-style (weekday rows x week cols) -----
+    heatmap(elId) {
+      const el = document.getElementById(elId);
+      const st = P.store.state;
+      const byDay = {};
+      st.transactions.forEach((t) => { if (t.type === 'expense') byDay[t.date] = (byDay[t.date] || 0) + t.amount; });
+      const WEEKS = 26;
+      // start = Monday, (WEEKS-1) weeks before this week's Monday
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const monday = new Date(today); monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+      const start = new Date(monday); start.setDate(monday.getDate() - (WEEKS - 1) * 7);
+      const iso = (x) => { const o = x.getTimezoneOffset(); return new Date(x.getTime() - o * 60000).toISOString().slice(0, 10); };
+      let max = 0; Object.values(byDay).forEach((v) => { if (v > max) max = v; });
+      const shade = (v) => {
+        if (!v) return 'var(--surface-2)';
+        const a = 0.18 + 0.82 * Math.min(1, v / (max || 1));
+        return `rgba(47,158,68,${a.toFixed(2)})`;
+      };
+      let cells = '';
+      for (let w = 0; w < WEEKS; w++) {
+        cells += '<div class="hm-col">';
+        for (let d = 0; d < 7; d++) {
+          const day = new Date(start); day.setDate(start.getDate() + w * 7 + d);
+          const key = iso(day);
+          const v = byDay[key] || 0;
+          const future = day > today;
+          const title = future ? '' : `${P.fmt.date(key)} · ${P.fmt.money(v)}`;
+          cells += `<div class="hm-cell" title="${title}" style="background:${future ? 'transparent' : shade(v)}"></div>`;
+        }
+        cells += '</div>';
+      }
+      const legend = `<div class="hm-legend"><span>Less</span>
+        <i style="background:var(--surface-2)"></i><i style="background:rgba(47,158,68,.3)"></i>
+        <i style="background:rgba(47,158,68,.6)"></i><i style="background:rgba(47,158,68,.9)"></i><span>More</span></div>`;
+      el.innerHTML = `<div class="hm-scroll"><div class="hm-grid">${cells}</div></div>${legend}`;
+    },
+
+    // ----- Top payees / merchants (expenses), fallback to category when no payee -----
+    topPayees(elId, range) {
+      const el = document.getElementById(elId);
+      const totals = {};
+      P.store.state.transactions.forEach((t) => {
+        if (t.type !== 'expense') return;
+        if (!withinRange(t.date, range || 'all')) return;
+        const key = (t.payee && t.payee.trim()) || (t.category || 'Other');
+        totals[key] = (totals[key] || 0) + t.amount;
+      });
+      const keys = Object.keys(totals).sort((a, b) => totals[b] - totals[a]).slice(0, 12);
+      if (!keys.length) { el.innerHTML = '<p class="hint">No expenses in range.</p>'; return; }
+      const max = totals[keys[0]];
+      el.innerHTML = keys.map((k) => {
+        const pct = Math.round((totals[k] / max) * 100);
+        return `<div class="bar-row"><div class="bar-label">${esc(k)}</div>
+          <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+          <div class="bar-val">${P.fmt.money(totals[k])}</div></div>`;
+      }).join('');
+    },
+
+    // ----- Month-over-month compare by category (expenses) -----
+    momCompare(elId) {
+      const el = document.getElementById(elId);
+      const st = P.store;
+      const cur = st.monthRange(0), prev = st.monthRange(-1);
+      const spend = (from, to) => {
+        const o = {};
+        st.state.transactions.forEach((t) => {
+          if (t.type !== 'expense') return;
+          if (t.date < from || t.date > to) return;
+          o[t.category || 'Other'] = (o[t.category || 'Other'] || 0) + t.amount;
+        });
+        return o;
+      };
+      const c = spend(cur.from, cur.to), p = spend(prev.from, prev.to);
+      const cats = Array.from(new Set([...Object.keys(c), ...Object.keys(p)]))
+        .sort((a, b) => (c[b] || 0) - (c[a] || 0));
+      if (!cats.length) { el.innerHTML = '<p class="hint">No expenses to compare yet.</p>'; return; }
+      let rows = cats.map((cat) => {
+        const cv = c[cat] || 0, pv = p[cat] || 0, d = cv - pv;
+        let delta = '—';
+        if (pv > 0) { const pct = Math.round((d / pv) * 100); delta = `<span class="${d <= 0 ? 'down' : 'up'}">${d <= 0 ? '▼' : '▲'} ${Math.abs(pct)}%</span>`; }
+        else if (cv > 0) delta = '<span class="up">new</span>';
+        return `<tr><td>${esc(cat)}</td><td class="num">${P.fmt.money(pv)}</td><td class="num">${P.fmt.money(cv)}</td><td class="num">${delta}</td></tr>`;
+      }).join('');
+      el.innerHTML = `<table class="bd mom"><thead><tr><th>Category</th><th class="num">${esc(prev.label)}</th><th class="num">${esc(cur.label)}</th><th class="num">Δ</th></tr></thead><tbody>${rows}</tbody></table>`;
+    },
+
+    // ----- Money-flow Sankey (SVG): income categories -> Budget -> expense categories + Saved -----
+    sankey(elId) {
+      const el = document.getElementById(elId);
+      const st = P.store.state;
+      const income = {}, expense = {};
+      st.transactions.forEach((t) => {
+        if (t.type === 'income') income[t.category || 'Other'] = (income[t.category || 'Other'] || 0) + t.amount;
+        else if (t.type === 'expense') expense[t.category || 'Other'] = (expense[t.category || 'Other'] || 0) + t.amount;
+      });
+      const TI = Object.values(income).reduce((s, v) => s + v, 0);
+      const TE = Object.values(expense).reduce((s, v) => s + v, 0);
+      if (TI <= 0 && TE <= 0) { el.innerHTML = '<p class="hint">Add income and expenses to see the flow.</p>'; return; }
+
+      const cap = (obj, n) => {
+        const ks = Object.keys(obj).sort((a, b) => obj[b] - obj[a]);
+        const top = ks.slice(0, n).map((k) => [k, obj[k]]);
+        const rest = ks.slice(n).reduce((s, k) => s + obj[k], 0);
+        if (rest > 0) top.push(['Other', rest]);
+        return top;
+      };
+      let left = cap(income, 6);      // [name, value]
+      let right = cap(expense, 8);
+      const M = Math.max(TI, TE) || 1;
+      if (TI > TE) right = right.concat([['Saved', TI - TE]]);
+      else if (TE > TI) left = left.concat([['Other funds', TE - TI]]);
+
+      const W = 680, H = 340, top = 14, gap = 6, nodeW = 11;
+      const leftX = 150, midX0 = W / 2 - 7, rightX = W - 150 - nodeW;
+      const cText = themeColors().text, cMut = themeColors().muted;
+      const greens = ['#2f9e44', '#57b368', '#1e6b30', '#7cc78c', '#245c33', '#8ecf9b', '#3f8f52', '#155f28', '#6fbf80'];
+
+      const avail = H - top * 2;
+      const scaleFor = (nodes) => (avail - gap * (nodes.length - 1)) / M;
+      const layout = (nodes, x, scale) => {
+        let y = top; return nodes.map((n, i) => { const h = Math.max(2, n[1] * scale); const o = { name: n[0], val: n[1], x, y, h, i }; y += h + gap; return o; });
+      };
+      const sL = scaleFor(left), sR = scaleFor(right);
+      const L = layout(left, leftX, sL), R = layout(right, rightX, sR);
+      // middle node split proportionally, top-down, in the same order as L (for inflow) and R (for outflow)
+      const midScale = (avail) / M; // single node, no gaps
+      const midH = M * midScale;
+      const midTop = top + (avail - midH) / 2;
+
+      // inflow slices on middle (matching L order)
+      let yin = midTop; const midIn = L.map((n) => { const h = n.val * midScale; const o = { y: yin, h }; yin += h; return o; });
+      let yout = midTop; const midOut = R.map((n) => { const h = n.val * midScale; const o = { y: yout, h }; yout += h; return o; });
+
+      const ribbon = (x1, y1a, y1b, x2, y2a, y2b, fill) => {
+        const mx = (x1 + x2) / 2;
+        return `<path d="M${x1},${y1a} C${mx},${y1a} ${mx},${y2a} ${x2},${y2a} L${x2},${y2b} C${mx},${y2b} ${mx},${y1b} ${x1},${y1b} Z" fill="${fill}" fill-opacity="0.45"/>`;
+      };
+      let svg = '';
+      // left -> middle
+      L.forEach((n, i) => { svg += ribbon(n.x + nodeW, n.y, n.y + n.h, midX0, midIn[i].y, midIn[i].y + midIn[i].h, greens[i % greens.length]); });
+      // middle -> right
+      R.forEach((n, i) => { svg += ribbon(midX0 + 14, midOut[i].y, midOut[i].y + midOut[i].h, n.x, n.y, n.y + n.h, greens[i % greens.length]); });
+      // nodes
+      const rect = (x, y, h, fill) => `<rect x="${x}" y="${y}" width="${nodeW}" height="${h}" rx="2" fill="${fill}"/>`;
+      L.forEach((n, i) => { svg += rect(n.x, n.y, n.h, greens[i % greens.length]); });
+      R.forEach((n, i) => { svg += rect(n.x, n.y, n.h, greens[i % greens.length]); });
+      svg += `<rect x="${midX0}" y="${midTop}" width="14" height="${midH}" rx="2" fill="${cMut}"/>`;
+      // labels
+      const label = (x, y, text, val, anchor) => `<text x="${x}" y="${y}" font-size="11" fill="${cText}" text-anchor="${anchor}">${esc(text)}</text><text x="${x}" y="${y + 12}" font-size="10" fill="${cMut}" text-anchor="${anchor}">${P.fmt.moneyShort(val)}</text>`;
+      L.forEach((n) => { svg += label(n.x - 6, n.y + n.h / 2, n.name, n.val, 'end'); });
+      R.forEach((n) => { svg += label(n.x + nodeW + 6, n.y + n.h / 2, n.name, n.val, 'start'); });
+      svg += `<text x="${midX0 + 7}" y="${midTop - 4}" font-size="10" fill="${cMut}" text-anchor="middle">Budget</text>`;
+
+      el.innerHTML = `<div class="sankey-wrap"><svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="xMidYMid meet">${svg}</svg></div>`;
     }
   };
 

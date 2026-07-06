@@ -57,9 +57,12 @@ window.Paisa = window.Paisa || {};
     screen('app');
     if (!wired) { P.ui.wire(); wired = true; }
     P.store.onSync = bannerCb;
+    P.store.onConflict = (c) => P.ui.showConflict(c);
     const gen = P.store.runRecurring();
     if (gen > 0) { await P.store.sync(); P.ui.toast(gen + ' recurring entr' + (gen === 1 ? 'y' : 'ies') + ' added'); }
     P.ui.show('dashboard');
+    // Show due-soon reminders after the dashboard is up.
+    setTimeout(() => P.ui.showReminders(), 350);
   }
 
   // ---------- PIN keypad ----------
@@ -177,8 +180,9 @@ window.Paisa = window.Paisa || {};
       localStorage.setItem(P.LS.setupDone, '1');
 
       P.store.setKey(key);
+      P.store.baseRev = env && env.rev ? env.rev : 0;
       if (existingObj) P.store.loadFromObject(existingObj); else P.store.fresh();
-      try { await P.store.push(); } catch (e) { /* offline: will sync later */ }
+      try { await P.store.push(true); } catch (e) { /* offline: will sync later */ }
 
       await enterApp();
     };

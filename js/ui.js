@@ -26,6 +26,70 @@ window.Paisa = window.Paisa || {};
   }
   function closeModal() { $('modal-root').hidden = true; $('modal-body').innerHTML = ''; }
 
+  // ---------- reminders popup (iOS-style) ----------
+  const REM_DISMISS_KEY = 'paisa.remDismiss';
+  function remDismissed() { try { return JSON.parse(localStorage.getItem(REM_DISMISS_KEY) || '{}'); } catch (e) { return {}; } }
+  function whenLabel(d) {
+    if (d <= 0) return 'Due today';
+    if (d === 1) return 'Due tomorrow';
+    return 'Due in ' + d + ' days';
+  }
+  const BELL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>';
+  const CARD = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>';
+
+  // Show the reminders popup if anything is due within the window and not dismissed today.
+  function showReminders() {
+    const st = S();
+    const today = P.fmt.todayISO();
+    const dismissed = remDismissed();
+    // Alert thresholds chosen: 5 days, and 1 day/due-day. Surface the window (<=5),
+    // but only pop for items at/under 5 days that haven't been dismissed today.
+    const items = st.reminders(5).filter((r) => !dismissed[r.key + '|' + today]);
+    if (!items.length) return;
+    $('rem-sub').textContent = items.length + (items.length === 1 ? ' item due soon' : ' items due soon');
+    $('rem-list').innerHTML = items.map((r) => {
+      const urgent = r.daysLeft <= 1;
+      const ic = r.kind === 'cc' ? CARD : BELL;
+      return `<div class="rem-item">
+        <div class="rem-ic${urgent ? ' urgent' : ''}">${ic}</div>
+        <div class="rem-main"><div class="rem-name">${esc(r.title)}</div>
+          <div class="rem-when"><span class="${urgent ? 'urgent' : ''}">${whenLabel(r.daysLeft)}</span> · ${P.fmt.date(r.dueDate)}</div></div>
+        <div class="rem-amt">${P.fmt.money(r.amount)}</div></div>`;
+    }).join('');
+    $('reminder-root').hidden = false;
+    const dismissAll = () => {
+      const dis = remDismissed();
+      items.forEach((r) => { dis[r.key + '|' + today] = 1; });
+      // prune old dismissals (keep only today's)
+      Object.keys(dis).forEach((k) => { if (!k.endsWith('|' + today)) delete dis[k]; });
+      localStorage.setItem(REM_DISMISS_KEY, JSON.stringify(dis));
+      $('reminder-root').hidden = true;
+    };
+    $('rem-done').onclick = dismissAll;
+    $('reminder-root').querySelector('[data-rem-close]').onclick = dismissAll;
+  }
+
+  // ---------- sync conflict resolver ----------
+  function showConflict(conflict) {
+    const body = `
+      <p class="hint">Your data was changed on another device since this one last synced.
+      Choose how to resolve it so nothing is lost.</p>
+      <button id="cf-merge" class="btn primary block">Merge both (recommended)</button>
+      <button id="cf-mine" class="btn ghost block">Keep this device's version</button>
+      <button id="cf-remote" class="btn ghost block">Keep the other device's version</button>
+      <div id="cf-msg" class="hint" style="margin-top:10px"></div>`;
+    openModal('Sync conflict', body, () => {
+      const go = async (choice) => {
+        $('cf-msg').textContent = 'Resolving…';
+        try { await S().resolveConflict(choice, conflict); toast('Synced'); closeModal(); }
+        catch (e) { $('cf-msg').textContent = 'Failed: ' + (e.message || e); }
+      };
+      $('cf-merge').onclick = () => go('merge');
+      $('cf-mine').onclick = () => go('mine');
+      $('cf-remote').onclick = () => go('remote');
+    });
+  }
+
   // ---------- navigation ----------
   function show(view) {
     currentView = view;
@@ -765,5 +829,5 @@ window.Paisa = window.Paisa || {};
     $('btn-lock').onclick = () => P.app.lock();
   }
 
-  P.ui = { wire, show, refresh, toast, closeModal, openTxnModal, exportJSON, exportCSV };
+  P.ui = { wire, show, refresh, toast, closeModal, openTxnModal, exportJSON, exportCSV, showReminders, showConflict };
 })(window.Paisa);

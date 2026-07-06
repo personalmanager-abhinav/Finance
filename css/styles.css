@@ -352,6 +352,35 @@ table.bd.mom .down { color: var(--green); font-weight: 600; }
 .tpl-chip .tpl-amt { color: var(--muted); font-variant-numeric: tabular-nums; }
 .tpl-chip.add { color: var(--green); border-style: dashed; }
 
+/* Reminders popup — iOS/macOS style */
+.rem-root { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 20px; }
+.rem-backdrop { position: absolute; inset: 0; background: rgba(20,25,30,.28); backdrop-filter: blur(6px); }
+.rem-card {
+  position: relative; width: 100%; max-width: 360px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 22px; padding: 18px 18px 14px;
+  box-shadow: 0 24px 60px rgba(0,0,0,.28), 0 2px 8px rgba(0,0,0,.1);
+  animation: remPop .22s cubic-bezier(.2,.9,.3,1.2);
+}
+@keyframes remPop { from { transform: scale(.94); opacity: 0; } to { transform: none; opacity: 1; } }
+.rem-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.rem-bell { width: 40px; height: 40px; border-radius: 12px; background: var(--green-soft); color: var(--green); display: grid; place-items: center; flex: none; }
+.rem-bell svg { width: 22px; height: 22px; }
+.rem-title { font-size: 17px; font-weight: 600; letter-spacing: -.3px; }
+.rem-sub { font-size: 12.5px; color: var(--muted); margin-top: 1px; }
+.rem-list { display: grid; gap: 8px; max-height: 46vh; overflow-y: auto; }
+.rem-item { display: flex; align-items: center; gap: 12px; background: var(--surface-2); border-radius: 14px; padding: 12px 14px; }
+.rem-ic { width: 34px; height: 34px; border-radius: 10px; background: var(--surface); display: grid; place-items: center; flex: none; }
+.rem-ic svg { width: 18px; height: 18px; color: var(--green); }
+.rem-ic.urgent svg { color: #d64545; }
+.rem-main { flex: 1; min-width: 0; }
+.rem-name { font-weight: 600; font-size: 14.5px; }
+.rem-when { font-size: 12.5px; color: var(--muted); margin-top: 1px; }
+.rem-when .urgent { color: #d64545; font-weight: 600; }
+.rem-amt { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rem-done { width: 100%; margin-top: 14px; border: none; background: var(--green); color: #fff; font-weight: 600; font-size: 15px; padding: 12px; border-radius: 14px; cursor: pointer; font-family: inherit; }
+.rem-done:hover { background: var(--green-hover); }
+
 /* Toast */
 .toast {
   position: fixed; bottom: calc(var(--nav-h) + 24px); left: 50%; transform: translateX(-50%);

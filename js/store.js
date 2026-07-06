@@ -49,6 +49,8 @@ window.Paisa = window.Paisa || {};
     dirty: false,
     _saveTimer: null,
     onSync: null,         // callback(status, msg)
+    onConflict: null,     // callback(conflictInfo) — remote changed under us
+    baseRev: 0,           // revision we last pulled/pushed; used to detect conflicts
 
     // ---- lifecycle ----
     setKey(key) { this.key = key; },
@@ -80,24 +82,69 @@ window.Paisa = window.Paisa || {};
       return { salt: null, data: raw };
     },
 
-    // Pull encrypted blob from gist, decrypt into state.
+    // Pull encrypted blob from gist, decrypt into state. Records the remote rev.
     async pull() {
       if (!P.gist.hasCreds()) return;
       const raw = await P.gist.read();
       const env = this.parseEnvelope(raw);
-      if (!env || !env.data) { this.fresh(); return; }
+      if (!env || !env.data) { this.fresh(); this.baseRev = 0; return; }
       const obj = await P.crypto.decrypt(this.key, env.data);
       this.loadFromObject(obj);
+      this.baseRev = env.rev || 0;
       this.dirty = false;
     },
 
-    // Encrypt + push state to gist now, wrapping in the salt envelope.
-    async push() {
+    // Encrypt + push state to gist. Unless `force`, first re-reads the remote and,
+    // if it was changed on another device since our baseRev, throws a conflict.
+    async push(force) {
       if (!P.gist.hasCreds() || !this.key) return;
+      const remoteRaw = await P.gist.read();
+      const remoteEnv = this.parseEnvelope(remoteRaw);
+      const remoteRev = remoteEnv && remoteEnv.rev ? remoteEnv.rev : 0;
+      if (!force && remoteRev !== this.baseRev) {
+        const err = new Error('conflict');
+        err.conflict = { env: remoteEnv, remoteRev };
+        throw err;
+      }
+      const newRev = Math.max(remoteRev, this.baseRev) + 1;
       const data = await P.crypto.encrypt(this.key, this.state);
-      const envelope = { v: 1, salt: localStorage.getItem(P.LS.salt), data };
+      const envelope = { v: 1, salt: localStorage.getItem(P.LS.salt), data, rev: newRev, updatedAt: new Date().toISOString() };
       await P.gist.write(JSON.stringify(envelope));
+      this.baseRev = newRev;
       this.dirty = false;
+    },
+
+    // Union two states by record id (id present on either side is kept).
+    // For ids on both sides, `mine` wins (protects the edit you just made).
+    mergeState(remoteObj) {
+      const mine = this.state;
+      const out = Object.assign(emptyState(), remoteObj, { meta: mine.meta || (remoteObj && remoteObj.meta) });
+      ['accounts', 'transactions', 'categories', 'recurring', 'goals', 'templates'].forEach((k) => {
+        const byId = {};
+        ((remoteObj && remoteObj[k]) || []).forEach((x) => { if (x && x.id) byId[x.id] = x; });
+        (mine[k] || []).forEach((x) => { if (x && x.id) byId[x.id] = x; });
+        out[k] = Object.values(byId);
+      });
+      this.state = out;
+    },
+
+    // Resolve a detected conflict. choice: 'mine' | 'remote' | 'merge'.
+    async resolveConflict(choice, conflict) {
+      if (choice === 'remote') {
+        const obj = await P.crypto.decrypt(this.key, conflict.env.data);
+        this.loadFromObject(obj);
+        this.baseRev = conflict.remoteRev;
+        this.dirty = false;
+      } else if (choice === 'merge') {
+        const remoteObj = await P.crypto.decrypt(this.key, conflict.env.data);
+        this.mergeState(remoteObj);
+        this.baseRev = conflict.remoteRev;
+        await this.push(true);
+      } else { // 'mine' — overwrite remote
+        this.baseRev = conflict.remoteRev;
+        await this.push(true);
+      }
+      if (P.ui) P.ui.refresh();
     },
 
     // Mark changed and debounce a background push.
@@ -115,7 +162,10 @@ window.Paisa = window.Paisa || {};
         await this.push();
         if (this.onSync) this.onSync('ok', 'Synced');
       } catch (e) {
-        if (this.onSync) this.onSync('err', e.message || 'Sync failed');
+        if (e.conflict) {
+          if (this.onSync) this.onSync('warn', 'Sync paused — changed elsewhere');
+          if (this.onConflict) this.onConflict(e.conflict);
+        } else if (this.onSync) this.onSync('err', e.message || 'Sync failed');
       }
     },
 
@@ -368,6 +418,31 @@ window.Paisa = window.Paisa || {};
       const avg = this.monthlyExpenseAvg(3);
       if (avg <= 0) return null;
       return this.totalAssets() / avg;
+    },
+
+    // Upcoming due items within `windowDays` (default 5): credit-card bills + recurring.
+    reminders(windowDays) {
+      const win = windowDays || 5;
+      const today = P.fmt.todayISO();
+      const now = new Date(today + 'T00:00:00');
+      const daysTo = (iso) => Math.round((new Date(iso + 'T00:00:00') - now) / 86400000);
+      const out = [];
+      // credit-card dues (only if something is owed and a due day is set)
+      this.state.accounts.filter((a) => a.type === 'credit' && a.dueDay).forEach((a) => {
+        const due = this.ccDue(a.id);
+        if (due <= 0) return;
+        const dd = this.nextDueDate(a);
+        if (!dd) return;
+        out.push({ key: 'cc-' + a.id + '-' + dd, kind: 'cc', accountId: a.id, title: a.name + ' bill', amount: due, dueDate: dd, daysLeft: daysTo(dd) });
+      });
+      // recurring bills (nextDate is always upcoming after auto-posting)
+      this.state.recurring.forEach((r) => {
+        if (!r.nextDate) return;
+        const acc = this.account(r.accountId);
+        out.push({ key: 'rec-' + r.id + '-' + r.nextDate, kind: 'recurring',
+          title: (r.category || r.note || 'Bill'), subtitle: acc ? acc.name : '', amount: r.amount, dueDate: r.nextDate, daysLeft: daysTo(r.nextDate) });
+      });
+      return out.filter((x) => x.daysLeft >= 0 && x.daysLeft <= win).sort((a, b) => a.daysLeft - b.daysLeft);
     }
   };
 

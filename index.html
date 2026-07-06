@@ -149,10 +149,29 @@
     <!-- TRANSACTIONS -->
     <section id="view-transactions" class="view" hidden>
       <div class="filters">
-        <input id="f-search" type="search" placeholder="Search category / note..." />
+        <input id="f-search" type="search" placeholder="Search payee, category, account, note, amount..." />
+        <div class="seg filter-type" id="f-type-seg">
+          <button data-ftype="" class="active" type="button">All</button>
+          <button data-ftype="income" type="button">Income</button>
+          <button data-ftype="expense" type="button">Expense</button>
+          <button data-ftype="transfer" type="button">Transfer</button>
+        </div>
         <div class="filter-row">
           <select id="f-account" class="mini-select"><option value="">All accounts</option></select>
           <select id="f-category" class="mini-select"><option value="">All categories</option></select>
+          <select id="f-sort" class="mini-select">
+            <option value="date-desc">Newest</option>
+            <option value="date-asc">Oldest</option>
+            <option value="amt-desc">Amount ↓</option>
+            <option value="amt-asc">Amount ↑</option>
+          </select>
+        </div>
+        <div class="date-presets" id="date-presets">
+          <button data-preset="week" type="button">This week</button>
+          <button data-preset="month" type="button">This month</button>
+          <button data-preset="lastmonth" type="button">Last month</button>
+          <button data-preset="year" type="button">This year</button>
+          <button data-preset="all" type="button">All</button>
         </div>
         <div class="filter-row">
           <input id="f-from" type="date" title="From date" />

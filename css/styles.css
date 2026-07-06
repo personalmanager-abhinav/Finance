@@ -191,6 +191,17 @@ table.bd tr:last-child td { border-bottom: none; }
 
 /* Transactions */
 .filters { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
+.seg.filter-type { display: flex; gap: 6px; margin-top: 10px; }
+.seg.filter-type button { flex: 1; padding: 8px; border: 1px solid var(--border); background: var(--surface); border-radius: 8px; font-weight: 500; font-size: 13px; color: var(--muted); cursor: pointer; font-family: inherit; transition: all .12s ease; }
+.seg.filter-type button.active { background: var(--green); border-color: var(--green); color: #fff; }
+.seg.filter-type button[data-ftype="expense"].active { background: var(--expense); border-color: var(--expense); }
+.seg.filter-type button[data-ftype="transfer"].active { background: var(--transfer); border-color: var(--transfer); }
+.date-presets { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.date-presets button { border: 1px solid var(--border); background: var(--surface); color: var(--muted); border-radius: 999px; padding: 6px 12px; font-size: 12.5px; cursor: pointer; font-family: inherit; transition: all .12s ease; }
+.date-presets button:hover { border-color: var(--green); }
+.date-presets button.active { background: var(--green-soft); border-color: var(--green); color: var(--green); font-weight: 600; }
+.t-amt-wrap { text-align: right; }
+.t-run { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 2px; }
 .filter-row { display: flex; gap: 8px; margin-top: 8px; }
 .filter-row > * { flex: 1; }
 .txn-summary { display: flex; gap: 14px; margin: 16px 2px; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
@@ -264,13 +275,16 @@ table.bd tr:last-child td { border-bottom: none; }
 .seg.type button.active[data-type="expense"] { background: var(--text); border-color: var(--text); }
 .seg.type button.active[data-type="transfer"] { background: var(--muted); border-color: var(--muted); }
 
-/* Spending heatmap */
+/* Spending heatmap (monthly grid) */
 .hm-scroll { overflow-x: auto; padding-bottom: 4px; }
-.hm-grid { display: flex; gap: 3px; min-width: max-content; }
-.hm-col { display: grid; grid-template-rows: repeat(7, 1fr); gap: 3px; }
-.hm-cell { width: 13px; height: 13px; border-radius: 3px; }
+.mhm { border-collapse: separate; border-spacing: 4px; width: 100%; min-width: 520px; }
+.mhm th { font-size: 10.5px; font-weight: 600; color: var(--faint); text-transform: uppercase; letter-spacing: .3px; padding-bottom: 2px; }
+.mhm td.yr { font-size: 12px; font-weight: 600; color: var(--muted); text-align: right; padding-right: 6px; white-space: nowrap; }
+.mhm-cell { height: 34px; border-radius: 6px; text-align: center; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--muted); }
+.mhm-cell.on { color: #fff; font-weight: 600; }
+.mhm-cell.empty { background: transparent !important; }
 .hm-legend { display: flex; align-items: center; gap: 4px; justify-content: flex-end; margin-top: 8px; font-size: 11px; color: var(--muted); }
-.hm-legend i { width: 13px; height: 13px; border-radius: 3px; display: inline-block; }
+.hm-legend i { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
 
 /* Bar list (top payees) */
 .bar-row { display: grid; grid-template-columns: 34% 1fr auto; align-items: center; gap: 10px; padding: 5px 0; }
@@ -283,6 +297,24 @@ table.bd tr:last-child td { border-bottom: none; }
 table.bd.mom th { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--faint); font-weight: 600; }
 table.bd.mom .up { color: var(--muted); font-weight: 600; }
 table.bd.mom .down { color: var(--green); font-weight: 600; }
+
+/* Calendar day view (modal) */
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+.cal-dow { text-align: center; font-size: 11px; color: var(--faint); font-weight: 600; padding-bottom: 2px; }
+.cal-cell { aspect-ratio: 1; border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; padding: 2px; transition: border-color .12s ease; }
+.cal-cell.empty { border: none; cursor: default; }
+.cal-cell:not(.empty):hover { border-color: var(--green); }
+.cal-cell.sel { outline: 2px solid var(--green); outline-offset: -1px; }
+.cal-cell .cal-d { font-size: 12px; font-weight: 500; }
+.cal-cell.on .cal-d { color: #fff; }
+.cal-cell .cal-v { font-size: 9px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.cal-cell.on .cal-v { color: rgba(255,255,255,.9); }
+.cal-detail { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 12px; }
+.cal-detail-head { font-weight: 600; font-size: 14px; margin-bottom: 8px; }
+.cal-detail-head .muted { font-weight: 400; font-size: 12px; }
+.cal-txn { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.cal-txn:last-child { border-bottom: none; }
+.cal-txn .t-amt { font-weight: 600; font-variant-numeric: tabular-nums; }
 
 /* Sankey */
 .sankey-wrap { overflow-x: auto; }

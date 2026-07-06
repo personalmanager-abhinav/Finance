@@ -160,18 +160,40 @@ window.Paisa = window.Paisa || {};
 
   // ---------- transactions ----------
   function getFilters() {
+    const typeBtn = document.querySelector('#f-type-seg button.active');
     return {
       q: $('f-search').value.trim().toLowerCase(),
+      type: typeBtn ? typeBtn.dataset.ftype : '',
       acc: $('f-account').value,
       cat: $('f-category').value,
       from: $('f-from').value,
       to: $('f-to').value,
       min: $('f-min').value ? Number($('f-min').value) : null,
-      max: $('f-max').value ? Number($('f-max').value) : null
+      max: $('f-max').value ? Number($('f-max').value) : null,
+      sort: $('f-sort').value
     };
   }
+  // Set the from/to date inputs from a preset key.
+  function applyDatePreset(preset) {
+    const iso = (d) => { const o = d.getTimezoneOffset(); return new Date(d.getTime() - o * 60000).toISOString().slice(0, 10); };
+    const now = new Date(); const y = now.getFullYear(), m = now.getMonth();
+    let from = '', to = '';
+    if (preset === 'week') {
+      const mon = new Date(now); mon.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+      from = iso(mon); to = iso(now);
+    } else if (preset === 'month') {
+      from = iso(new Date(y, m, 1)); to = iso(new Date(y, m + 1, 0));
+    } else if (preset === 'lastmonth') {
+      from = iso(new Date(y, m - 1, 1)); to = iso(new Date(y, m, 0));
+    } else if (preset === 'year') {
+      from = iso(new Date(y, 0, 1)); to = iso(new Date(y, 11, 31));
+    } // 'all' leaves both blank
+    $('f-from').value = from; $('f-to').value = to;
+  }
+
   function applyFilters(list, f) {
     return list.filter((t) => {
+      if (f.type && t.type !== f.type) return false;
       if (f.acc && t.accountId !== f.acc && t.toAccountId !== f.acc) return false;
       if (f.cat && t.category !== f.cat) return false;
       if (f.from && t.date < f.from) return false;
@@ -179,7 +201,11 @@ window.Paisa = window.Paisa || {};
       if (f.min != null && t.amount < f.min) return false;
       if (f.max != null && t.amount > f.max) return false;
       if (f.q) {
-        const hay = (t.category + ' ' + (t.note || '')).toLowerCase();
+        const acc = S().account(t.accountId);
+        const toAcc = t.toAccountId ? S().account(t.toAccountId) : null;
+        const hay = [t.category, t.payee, t.note, t.type,
+          acc && acc.name, toAcc && toAcc.name, String(t.amount)]
+          .filter(Boolean).join(' ').toLowerCase();
         if (!hay.includes(f.q)) return false;
       }
       return true;
@@ -200,20 +226,45 @@ window.Paisa = window.Paisa || {};
     populateFilterSelects();
     const st = S();
     const f = getFilters();
-    const list = applyFilters(st.state.transactions.slice(), f)
-      .sort((a, b) => (b.date < a.date ? -1 : b.date > a.date ? 1 : 0) || (b.id < a.id ? -1 : 1));
+    const byDateDesc = (a, b) => (b.date < a.date ? -1 : b.date > a.date ? 1 : 0) || (b.id < a.id ? -1 : 1);
+    const sorters = {
+      'date-desc': byDateDesc,
+      'date-asc': (a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0) || (a.id < b.id ? -1 : 1),
+      'amt-desc': (a, b) => b.amount - a.amount || byDateDesc(a, b),
+      'amt-asc': (a, b) => a.amount - b.amount || byDateDesc(a, b)
+    };
+    const list = applyFilters(st.state.transactions.slice(), f).sort(sorters[f.sort] || byDateDesc);
+    const grouped = (f.sort || 'date-desc').startsWith('date');
+
+    // Running balance across the filtered results (chronological).
+    // If a single account is filtered, it reflects that account's inflow/outflow;
+    // otherwise it is the net-worth effect (transfers net to zero).
+    const oneAcc = f.acc || null;
+    const delta = (t) => {
+      if (oneAcc) {
+        if (t.type === 'transfer') return (t.toAccountId === oneAcc ? t.amount : 0) - (t.accountId === oneAcc ? t.amount : 0);
+        return (t.type === 'income' ? 1 : -1) * t.amount;
+      }
+      return t.type === 'income' ? t.amount : t.type === 'expense' ? -t.amount : 0;
+    };
+    const runningById = {};
+    let run = 0;
+    list.slice().sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0) || (a.id < b.id ? -1 : 1))
+      .forEach((t) => { run += delta(t); runningById[t.id] = run; });
 
     let income = 0, expense = 0;
     list.forEach((t) => { if (t.type === 'income') income += t.amount; else if (t.type === 'expense') expense += t.amount; });
+    const runLabel = oneAcc ? 'Net change' : 'Net';
     $('txn-summary').innerHTML =
       `<span>${list.length} txns</span><span>Income <b>${P.fmt.money(income)}</b></span>` +
-      `<span>Expense <b>${P.fmt.money(expense)}</b></span><span>Net <b>${P.fmt.money(income - expense)}</b></span>`;
+      `<span>Expense <b>${P.fmt.money(expense)}</b></span><span>${runLabel} <b>${P.fmt.money(income - expense)}</b></span>` +
+      (oneAcc ? `<span>Running <b>${P.fmt.money(run)}</b></span>` : '');
 
     const wrap = $('txn-list'); wrap.innerHTML = '';
     if (!list.length) { wrap.innerHTML = '<p class="hint">No transactions match.</p>'; return; }
     let lastDay = null;
     list.forEach((t) => {
-      if (t.date !== lastDay) {
+      if (grouped && t.date !== lastDay) {
         lastDay = t.date;
         const lbl = document.createElement('div'); lbl.className = 'txn-day-label';
         lbl.textContent = P.fmt.dayLabel(t.date); wrap.appendChild(lbl);
@@ -229,13 +280,15 @@ window.Paisa = window.Paisa || {};
         icon = t.type === 'income' ? '↓' : '↑';
         sign = t.type === 'income' ? '+' : '−';
       }
+      if (t.payee) meta = esc(t.payee) + ' · ' + meta;
       if (t.note) meta += ' · ' + esc(t.note);
+      const runHTML = oneAcc ? `<div class="t-run">bal ${P.fmt.money(runningById[t.id])}</div>` : '';
       const row = document.createElement('div');
       row.className = 'txn';
       row.innerHTML = `<div class="t-icon">${icon}</div>
         <div class="t-main"><div class="t-cat">${esc(t.category || (t.type === 'transfer' ? 'Transfer' : 'Uncategorised'))}</div>
         <div class="t-meta">${meta}</div></div>
-        <div class="t-amt ${t.type}">${sign}${P.fmt.money(t.amount)}</div>`;
+        <div class="t-amt-wrap"><div class="t-amt ${t.type}">${sign}${P.fmt.money(t.amount)}</div>${runHTML}</div>`;
       row.onclick = () => openTxnModal(t);
       wrap.appendChild(row);
     });
@@ -268,6 +321,22 @@ window.Paisa = window.Paisa || {};
         `<span class="chip">${esc(c.name)}<button data-del-cat="${c.id}" title="Delete">✕</button></span>`).join('');
       return `<div class="ri-sub" style="margin-top:6px">${type === 'income' ? 'Income' : 'Expense'}</div><div>${chips || '<span class="hint">none</span>'}</div>`;
     }).join('');
+
+    // goals
+    $('manage-goals').innerHTML = st.state.goals.map((g) => {
+      const pct = g.target > 0 ? Math.min(100, Math.round((g.current / g.target) * 100)) : 0;
+      return `<div class="row-item"><div class="ri-main"><b>${esc(g.name)}</b>
+        <div class="ri-sub">${P.fmt.money(g.current)} / ${P.fmt.money(g.target)} · ${pct}%${g.deadline ? ' · by ' + P.fmt.date(g.deadline) : ''}</div></div>
+        <button class="btn ghost" data-goal-edit="${g.id}">Edit</button></div>`;
+    }).join('') || '<p class="hint">No goals yet.</p>';
+
+    // templates
+    $('manage-templates').innerHTML = st.state.templates.map((t) => {
+      const acc = st.account(t.accountId);
+      return `<div class="row-item"><div class="ri-main"><b>${esc(t.label)}</b>
+        <div class="ri-sub">${t.type} · ${P.fmt.money(t.amount)}${t.category ? ' · ' + esc(t.category) : ''}${acc ? ' · ' + esc(acc.name) : ''}</div></div>
+        <button class="btn ghost danger" data-del-tpl="${t.id}">Delete</button></div>`;
+    }).join('') || '<p class="hint">No templates. Add frequent transactions for one-tap entry.</p>';
 
     // recurring
     $('manage-recurring').innerHTML = st.state.recurring.map((r) => {
@@ -454,6 +523,147 @@ window.Paisa = window.Paisa || {};
     });
   }
 
+  // ---------- goal modal ----------
+  function openGoalModal(existing) {
+    const g = existing || { name: '', target: '', current: '', deadline: '' };
+    const body = `
+      <label>Goal name</label>
+      <input id="g-name" type="text" placeholder="e.g. Emergency fund" value="${esc(g.name)}" />
+      <label>Target amount (₹)</label>
+      <input id="g-target" type="number" step="0.01" placeholder="0" value="${g.target || ''}" />
+      <label>Already saved (₹)</label>
+      <input id="g-current" type="number" step="0.01" placeholder="0" value="${g.current || ''}" />
+      <label>Target date (optional)</label>
+      <input id="g-deadline" type="date" value="${g.deadline || ''}" />
+      <button id="g-save" class="btn primary block">${existing ? 'Save goal' : 'Add goal'}</button>
+      ${existing ? '<button id="g-delete" class="btn ghost danger block">Delete goal</button>' : ''}`;
+    openModal(existing ? 'Edit goal' : 'New goal', body, () => {
+      $('g-save').onclick = () => {
+        const data = { name: $('g-name').value.trim(), target: Number($('g-target').value) || 0,
+          current: Number($('g-current').value) || 0, deadline: $('g-deadline').value || null };
+        if (!data.name) { toast('Name required'); return; }
+        if (data.target <= 0) { toast('Set a target amount'); return; }
+        if (existing) S().updateGoal(existing.id, data); else S().addGoal(data);
+        toast('Saved'); closeModal(); refresh();
+      };
+      if (existing) $('g-delete').onclick = () => { S().deleteGoal(existing.id); toast('Deleted'); closeModal(); refresh(); };
+    });
+  }
+  function openContributeModal(goalId) {
+    const g = S().state.goals.find((x) => x.id === goalId); if (!g) return;
+    const remaining = Math.max(0, g.target - g.current);
+    const body = `
+      <p class="hint">Add to <b>${esc(g.name)}</b>. ${P.fmt.money(remaining)} to go.</p>
+      <label>Amount (₹)</label>
+      <input id="c-amount" type="number" step="0.01" placeholder="0" value="${remaining || ''}" />
+      <button id="c-save" class="btn primary block">Add contribution</button>`;
+    openModal('Contribute to goal', body, () => {
+      $('c-save').onclick = () => {
+        const amt = Number($('c-amount').value);
+        if (!amt) { toast('Enter amount'); return; }
+        S().contributeGoal(goalId, amt); toast('Added'); closeModal(); refresh();
+      };
+    });
+  }
+
+  // ---------- template modal ----------
+  function openTemplateModal() {
+    const st = S();
+    if (!st.state.accounts.length) { toast('Add an account first'); openAccountModal(); return; }
+    const body = `
+      <label>Label</label>
+      <input id="tp-label" type="text" placeholder="e.g. Morning coffee" />
+      <div class="seg type">
+        <button data-type="expense" class="active">Expense</button>
+        <button data-type="income">Income</button>
+      </div>
+      <label>Amount (₹)</label>
+      <input id="tp-amount" type="number" step="0.01" placeholder="0" />
+      <label>Category</label>
+      <select id="tp-category">${categoryOptions('expense', '')}</select>
+      <label>Account</label>
+      <select id="tp-account">${accountOptions(st.state.accounts[0].id)}</select>
+      <label>Payee (optional)</label>
+      <input id="tp-payee" type="text" placeholder="e.g. Starbucks" />
+      <button id="tp-save" class="btn primary block">Save template</button>`;
+    openModal('New quick-add template', body, (root) => {
+      let type = 'expense';
+      root.querySelectorAll('.seg.type button').forEach((b) => b.onclick = () => {
+        type = b.dataset.type;
+        root.querySelectorAll('.seg.type button').forEach((x) => x.classList.toggle('active', x.dataset.type === type));
+        $('tp-category').innerHTML = categoryOptions(type, '');
+      });
+      $('tp-save').onclick = () => {
+        const label = $('tp-label').value.trim();
+        const amount = Number($('tp-amount').value);
+        if (!label) { toast('Label required'); return; }
+        if (!amount || amount <= 0) { toast('Enter amount'); return; }
+        st.addTemplate({ label, type, amount, category: $('tp-category').value,
+          accountId: $('tp-account').value, payee: $('tp-payee').value.trim() });
+        toast('Template saved'); closeModal(); refresh();
+      };
+    });
+  }
+
+  // ---------- calendar day view (drill-down from heatmap) ----------
+  function openMonthCalendar(ym) {
+    const st = S();
+    const [y, mo] = ym.split('-').map(Number);
+    const first = new Date(y, mo - 1, 1);
+    const daysInMonth = new Date(y, mo, 0).getDate();
+    const lead = (first.getDay() + 6) % 7; // Mon-start offset
+    const title = first.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+
+    // per-day expense totals for shading
+    const byDay = {};
+    let maxV = 0;
+    st.state.transactions.forEach((t) => {
+      if (t.type === 'expense' && t.date.slice(0, 7) === ym) {
+        byDay[t.date] = (byDay[t.date] || 0) + t.amount;
+        if (byDay[t.date] > maxV) maxV = byDay[t.date];
+      }
+    });
+    const iso = (d) => `${ym}-${String(d).padStart(2, '0')}`;
+    const shade = (v) => v > 0 ? `rgba(47,158,68,${(0.15 + 0.85 * Math.min(1, v / (maxV || 1))).toFixed(2)})` : 'transparent';
+    const strong = (v) => v > 0 && v / (maxV || 1) > 0.5;
+
+    const dows = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    let cells = dows.map((d) => `<div class="cal-dow">${d}</div>`).join('');
+    for (let i = 0; i < lead; i++) cells += '<div class="cal-cell empty"></div>';
+    for (let d = 1; d <= daysInMonth; d++) {
+      const key = iso(d); const v = byDay[key] || 0;
+      cells += `<div class="cal-cell${strong(v) ? ' on' : ''}" data-day="${key}" style="background:${shade(v)}">
+        <span class="cal-d">${d}</span>${v > 0 ? `<span class="cal-v">${P.fmt.moneyShort(v)}</span>` : ''}</div>`;
+    }
+    const body = `<div class="cal-grid">${cells}</div><div id="cal-detail" class="cal-detail"><p class="hint">Tap a day to see its transactions.</p></div>`;
+    openModal(title, body, (root) => {
+      root.querySelector('.cal-grid').addEventListener('click', (e) => {
+        const c = e.target.closest('[data-day]'); if (!c) return;
+        root.querySelectorAll('.cal-cell').forEach((x) => x.classList.remove('sel'));
+        c.classList.add('sel');
+        renderDayDetail(c.dataset.day);
+      });
+    });
+  }
+  function renderDayDetail(dateISO) {
+    const st = S();
+    const items = st.state.transactions.filter((t) => t.date === dateISO)
+      .sort((a, b) => b.amount - a.amount);
+    const el = $('cal-detail');
+    if (!items.length) { el.innerHTML = `<p class="hint">${P.fmt.date(dateISO)} — no transactions.</p>`; return; }
+    let inc = 0, exp = 0;
+    items.forEach((t) => { if (t.type === 'income') inc += t.amount; else if (t.type === 'expense') exp += t.amount; });
+    const rows = items.map((t) => {
+      const acc = st.account(t.accountId);
+      const sign = t.type === 'income' ? '+' : t.type === 'expense' ? '−' : '';
+      const label = t.payee || t.category || (t.type === 'transfer' ? 'Transfer' : 'Uncategorised');
+      return `<div class="cal-txn"><div><b>${esc(label)}</b><div class="ri-sub">${esc(t.category || '')}${acc ? ' · ' + esc(acc.name) : ''}</div></div>
+        <div class="t-amt ${t.type}">${sign}${P.fmt.money(t.amount)}</div></div>`;
+    }).join('');
+    el.innerHTML = `<div class="cal-detail-head">${P.fmt.date(dateISO)}
+      <span class="muted">· in ${P.fmt.money(inc)} · out ${P.fmt.money(exp)}</span></div>${rows}`;
+  }
+
   // ---------- export ----------
   function download(filename, text, mime) {
     const blob = new Blob([text], { type: mime });
@@ -469,10 +679,10 @@ window.Paisa = window.Paisa || {};
   function exportCSV() {
     const st = S();
     const acctName = (id) => { const a = st.account(id); return a ? a.name : ''; };
-    const rows = [['Date', 'Type', 'Category', 'Account', 'To Account', 'Amount', 'Note']];
+    const rows = [['Date', 'Type', 'Category', 'Account', 'To Account', 'Payee', 'Amount', 'Note']];
     st.state.transactions.slice().sort((a, b) => a.date < b.date ? -1 : 1).forEach((t) => {
       rows.push([t.date, t.type, t.category || '', acctName(t.accountId), t.toAccountId ? acctName(t.toAccountId) : '',
-        t.amount, (t.note || '').replace(/"/g, '""')]);
+        (t.payee || '').replace(/"/g, '""'), t.amount, (t.note || '').replace(/"/g, '""')]);
     });
     const csv = rows.map((r) => r.map((c) => /[",\n]/.test(String(c)) ? `"${c}"` : c).join(',')).join('\n');
     download('paisa-transactions-' + P.fmt.todayISO() + '.csv', csv, 'text/csv');
@@ -495,11 +705,44 @@ window.Paisa = window.Paisa || {};
     // dashboard chart selectors
     $('pie-range').onchange = renderDashboard;
     $('bar-granularity').onchange = renderDashboard;
+    $('payee-range').onchange = renderInsights;
+    // heatmap month -> calendar drill-down
+    $('ins-heatmap').addEventListener('click', (e) => {
+      const c = e.target.closest('[data-ym]'); if (c) openMonthCalendar(c.dataset.ym);
+    });
+    // goals + templates add buttons
+    $('btn-add-goal').onclick = () => openGoalModal();
+    $('btn-add-template').onclick = () => openTemplateModal();
+    // dashboard delegated clicks (templates + goals)
+    $('view-dashboard').addEventListener('click', (e) => {
+      const t = e.target.closest('[data-tpl],[data-goal-add],[data-goal-edit]') || e.target;
+      if (t.id === 'tpl-add-inline') { openTemplateModal(); return; }
+      if (t.dataset.tpl) { S().applyTemplate(t.dataset.tpl); toast('Added'); refresh(); }
+      else if (t.dataset.goalAdd) openContributeModal(t.dataset.goalAdd);
+      else if (t.dataset.goalEdit) openGoalModal(S().state.goals.find((g) => g.id === t.dataset.goalEdit));
+    });
     // filters
     ['f-search', 'f-account', 'f-category', 'f-from', 'f-to', 'f-min', 'f-max'].forEach((id) =>
       $(id).addEventListener('input', renderTransactions));
+    $('f-sort').addEventListener('change', renderTransactions);
+    // quick date presets
+    $('date-presets').addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      applyDatePreset(b.dataset.preset);
+      $('date-presets').querySelectorAll('button').forEach((x) => x.classList.toggle('active', x === b));
+      renderTransactions();
+    });
+    // income/expense/transfer segmented filter
+    $('f-type-seg').addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      $('f-type-seg').querySelectorAll('button').forEach((x) => x.classList.toggle('active', x === b));
+      renderTransactions();
+    });
     $('f-clear').onclick = () => {
       ['f-search', 'f-account', 'f-category', 'f-from', 'f-to', 'f-min', 'f-max'].forEach((id) => ($(id).value = ''));
+      $('f-sort').value = 'date-desc';
+      $('f-type-seg').querySelectorAll('button').forEach((x) => x.classList.toggle('active', x.dataset.ftype === ''));
+      $('date-presets').querySelectorAll('button').forEach((x) => x.classList.remove('active'));
       renderTransactions();
     };
     // export
@@ -513,12 +756,13 @@ window.Paisa = window.Paisa || {};
       else if (t.dataset.payCc) openPayCCModal(t.dataset.payCc);
       else if (t.dataset.delCat) { S().deleteCategory(t.dataset.delCat); renderManage(); }
       else if (t.dataset.delRec) { S().deleteRecurring(t.dataset.delRec); renderManage(); }
+      else if (t.dataset.goalEdit) openGoalModal(S().state.goals.find((g) => g.id === t.dataset.goalEdit));
+      else if (t.dataset.delTpl) { S().deleteTemplate(t.dataset.delTpl); renderManage(); }
     });
     // topbar
     $('btn-sync').onclick = () => S().sync();
     $('btn-theme').onclick = () => P.app.toggleTheme();
     $('btn-lock').onclick = () => P.app.lock();
-    $('nav-lock').onclick = () => P.app.lock();
   }
 
   P.ui = { wire, show, refresh, toast, closeModal, openTxnModal, exportJSON, exportCSV };

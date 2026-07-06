@@ -109,7 +109,7 @@ window.Paisa = window.Paisa || {};
     },
 
     async sync() {
-      if (!P.gist.hasCreds() || !this.key) { if (this.onSync) this.onSync('warn', 'No Gist configured'); return; }
+      if (!P.gist || !P.gist.hasCreds() || !this.key) { if (this.onSync) this.onSync('warn', 'No Gist configured'); return; }
       try {
         if (this.onSync) this.onSync('busy', 'Syncing…');
         await this.push();

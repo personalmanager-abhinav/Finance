@@ -181,41 +181,44 @@ window.Paisa = window.Paisa || {};
       el.innerHTML = html;
     },
 
-    // ----- Spending heatmap: last 26 weeks, GitHub-style (weekday rows x week cols) -----
+    // ----- Spending heatmap: month grid (years x Jan..Dec), shaded by monthly spend -----
     heatmap(elId) {
       const el = document.getElementById(elId);
-      const st = P.store.state;
-      const byDay = {};
-      st.transactions.forEach((t) => { if (t.type === 'expense') byDay[t.date] = (byDay[t.date] || 0) + t.amount; });
-      const WEEKS = 26;
-      // start = Monday, (WEEKS-1) weeks before this week's Monday
-      const today = new Date(); today.setHours(0, 0, 0, 0);
-      const monday = new Date(today); monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
-      const start = new Date(monday); start.setDate(monday.getDate() - (WEEKS - 1) * 7);
-      const iso = (x) => { const o = x.getTimezoneOffset(); return new Date(x.getTime() - o * 60000).toISOString().slice(0, 10); };
-      let max = 0; Object.values(byDay).forEach((v) => { if (v > max) max = v; });
-      const shade = (v) => {
-        if (!v) return 'var(--surface-2)';
-        const a = 0.18 + 0.82 * Math.min(1, v / (max || 1));
-        return `rgba(47,158,68,${a.toFixed(2)})`;
-      };
-      let cells = '';
-      for (let w = 0; w < WEEKS; w++) {
-        cells += '<div class="hm-col">';
-        for (let d = 0; d < 7; d++) {
-          const day = new Date(start); day.setDate(start.getDate() + w * 7 + d);
-          const key = iso(day);
-          const v = byDay[key] || 0;
-          const future = day > today;
-          const title = future ? '' : `${P.fmt.date(key)} · ${P.fmt.money(v)}`;
-          cells += `<div class="hm-cell" title="${title}" style="background:${future ? 'transparent' : shade(v)}"></div>`;
+      const txns = P.store.state.transactions.filter((t) => t.type === 'expense');
+      if (!txns.length) { el.innerHTML = '<p class="hint">No expenses yet to map.</p>'; return; }
+      const byMonth = {};            // 'YYYY-MM' -> total
+      let minY = 9999, maxV = 0;
+      const now = new Date(); const curY = now.getFullYear(), curM = now.getMonth();
+      txns.forEach((t) => {
+        const key = t.date.slice(0, 7);
+        byMonth[key] = (byMonth[key] || 0) + t.amount;
+        const y = +t.date.slice(0, 4); if (y < minY) minY = y;
+      });
+      Object.values(byMonth).forEach((v) => { if (v > maxV) maxV = v; });
+      if (minY === 9999) minY = curY;
+
+      const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const shade = (v) => v > 0 ? `rgba(47,158,68,${(0.15 + 0.85 * Math.min(1, v / (maxV || 1))).toFixed(2)})` : 'var(--surface-2)';
+      const strong = (v) => v > 0 && (v / (maxV || 1)) > 0.5;   // white text on dark cells
+
+      let head = '<tr><th></th>' + MON.map((m) => `<th>${m}</th>`).join('') + '</tr>';
+      let rows = '';
+      for (let y = maxV ? minY : curY; y <= curY; y++) {
+        let tds = `<td class="yr">${y}</td>`;
+        for (let m = 0; m < 12; m++) {
+          const future = (y === curY && m > curM);
+          const key = `${y}-${String(m + 1).padStart(2, '0')}`;
+          const v = byMonth[key] || 0;
+          if (future) { tds += '<td class="mhm-cell empty"></td>'; continue; }
+          const label = v > 0 ? P.fmt.moneyShort(v) : '';
+          tds += `<td class="mhm-cell${strong(v) ? ' on' : ''}" data-ym="${key}" title="${MON[m]} ${y} · ${P.fmt.money(v)} · tap to open" style="background:${shade(v)}">${label}</td>`;
         }
-        cells += '</div>';
+        rows += `<tr>${tds}</tr>`;
       }
       const legend = `<div class="hm-legend"><span>Less</span>
-        <i style="background:var(--surface-2)"></i><i style="background:rgba(47,158,68,.3)"></i>
-        <i style="background:rgba(47,158,68,.6)"></i><i style="background:rgba(47,158,68,.9)"></i><span>More</span></div>`;
-      el.innerHTML = `<div class="hm-scroll"><div class="hm-grid">${cells}</div></div>${legend}`;
+        <i style="background:var(--surface-2)"></i><i style="background:rgba(47,158,68,.35)"></i>
+        <i style="background:rgba(47,158,68,.7)"></i><i style="background:rgba(47,158,68,1)"></i><span>More</span></div>`;
+      el.innerHTML = `<div class="hm-scroll"><table class="mhm"><thead>${head}</thead><tbody>${rows}</tbody></table></div>${legend}`;
     },
 
     // ----- Top payees / merchants (expenses), fallback to category when no payee -----

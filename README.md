@@ -5,8 +5,10 @@ A private, offline-capable personal finance tracker. Plain HTML/CSS/vanilla JS, 
 - Installable PWA (iOS + Android home screen) with a proper ₹ icon.
 - Client-side **AES-GCM** encryption; key derived from your **PIN** (PBKDF2).
 - Accounts: cash, bank, UPI, debit card, and **credit card** (with dues + due dates).
-- Income / expense / transfer transactions, recurring entries, categories.
+- Income / expense / transfer transactions, recurring entries, categories, optional payee.
 - Dashboard: net worth, category pie, income-vs-expense trend, net-worth-over-time, account × category breakdown.
+- **Insights tab:** savings rate & runway, plain-language auto-insights, spending heatmap, top payees, money-flow (Sankey), month-over-month compare.
+- **Savings goals** with progress + contributions; **quick-add templates** for one-tap entry.
 - Light / dark theme, JSON + CSV export, search & filter.
 
 ---
@@ -105,12 +107,21 @@ The decrypted `data.json` looks like:
   ],
   "transactions": [
     { "id": "id-…", "type": "expense", "amount": 2000, "date": "2026-07-02",
-      "category": "Food", "accountId": "id-…", "toAccountId": null, "note": "", "recurringId": null }
+      "category": "Food", "accountId": "id-…", "toAccountId": null,
+      "payee": "Blinkit", "note": "", "recurringId": null }
   ],
   "categories": [ { "id": "id-…", "name": "Food", "type": "expense" } ],
   "recurring": [
     { "id": "id-…", "type": "expense", "amount": 300, "category": "Bills",
       "accountId": "id-…", "toAccountId": null, "note": "", "frequency": "monthly", "nextDate": "2026-08-01" }
+  ],
+  "goals": [
+    { "id": "id-…", "name": "Emergency fund", "target": 100000, "current": 25000,
+      "deadline": "2026-12-31", "createdAt": "2026-07-06" }
+  ],
+  "templates": [
+    { "id": "id-…", "label": "Coffee", "type": "expense", "amount": 200,
+      "category": "Food", "accountId": "id-…", "toAccountId": null, "payee": "Starbucks", "note": "" }
   ],
   "meta": { "createdAt": "2026-07-06T…Z" }
 }
@@ -120,7 +131,7 @@ Account types: `cash | bank | upi | card | credit`. Transaction types: `income |
 
 **Sign convention:** income `+amount` to account, expense `−amount`, transfer `−from / +to`. A credit card therefore goes **negative** as you spend (negative balance = due); paying the bill is a transfer that moves it back toward zero. Net worth is simply the sum of all account balances, which equals **assets − credit-card dues**. Transfers never count as income or expense in reports.
 
-The schema is extensible — a `payee` field can be added later; the "breakdown by account & category" view is the current stand-in for payee-level analysis.
+**Insights math:** savings rate = net ÷ income for the month; runway = liquid assets ÷ average monthly expense (last 3 months); auto-insights compare the current month against last month and against your 3-month category averages. Transfers are excluded from every insight and chart. `payee` powers the top-payees view (falls back to category when blank); goals track `current` toward `target`; templates create a today-dated transaction on one tap.
 
 ---
 
